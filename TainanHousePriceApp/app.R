@@ -1,64 +1,68 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(DT)
+library(dplyr)
+library(shinythemes)
 
+#setwd(choose.dir())
+new_house <- read.csv('A_Tainan.csv')
 # Define UI for application that draws a histogram
-ui <- fluidPage(
+ui <- navbarPage(
 
     # Application title
-    titlePanel("Old Faithful Geyser Data"),
+    title="內政部實價登陸資料應用",
+    theme = shinytheme("sandstone"),
+    fluid = TRUE,
     
     # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-            titlePanel("Title Panel here is 中文"),
+    tabPanel("資料視察",
+        sidebarLayout(
+            sidebarPanel(
+                titlePanel("Title Panel here is 中文"),
             
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30),
+                sliderInput("bins",
+                            "Number of bins:",
+                            min = 1,
+                            max = 50,
+                            value = 30),
             
-            fluidRow(column(3,
+                fluidRow(column(3,
                             
-                            # Select which Gender(s) to plot
-                            checkboxGroupInput(inputId = "GenderFinder",
-                                               label = "Select Gender(s):",
-                                               choices = c("Male" = "M", "Female" = "F"),
-                                               selected = "M"),
+                                # Select which Gender(s) to plot
+                                checkboxGroupInput(inputId = "GenderFinder",
+                                                label = "Select Gender(s):",
+                                                choices = c("Male" = "M", "Female" = "F"),
+                                                selected = "M"),
                             
-                            # Select which Division(s) to plot
-                            checkboxGroupInput(inputId = "DivisionFinder",
-                                               label = "Select Division(s):",
-                                               choices = c("DI", "DII", "DIII"),
-                                               selected = "DI")
+                                # Select which Division(s) to plot
+                                checkboxGroupInput(inputId = "DivisionFinder",
+                                                label = "Select Division(s):",
+                                                choices = c("DI", "DII", "DIII"),
+                                                selected = "DI")
+                ),
+                column(6, offset = 2,
+                    # Select which Region(s) to plot
+                    checkboxGroupInput(inputId = "RegionFinder",
+                                        label = "行政區",
+                                        choices = c("安平  區" = "安平區", "東區" = "東區", "西區" = "MidWest", "中西區", "West", "南區" = "南區", "安南區", "永康區", "新市區"),
+                                        selected = "NewEngland")
+                )),
+                sliderInput("transactiondate", 
+                            "交易日期",
+                            min = 1050101, 
+                            max = 1081231, 
+                            value = c(1060101, 1061231))
             ),
-            column(6, offset = 2,
-                   # Select which Region(s) to plot
-                   checkboxGroupInput(inputId = "RegionFinder",
-                                      label = "區域",
-                                      choices = c("安平區" = "NewEngland", "東區" = "MidAtlantic", "西區" = "MidWest", "安南區", "West", "南區" = "SouthWest", "沙崙區", "Alaska", "Hawaii"),
-                                      selected = "NewEngland")
-            ))
-            
-        ),
 
-
-        # Show a plot of the generated distribution
         mainPanel(
-           plotOutput("distPlot"),
-           # Main Table
-           DT::dataTableOutput("mytable")
+            # Show a plot of the generated distribution
+            plotOutput("distPlot"),
+            # Main Table
+            DT::dataTableOutput("mytable")
         )
-    )
+    ),
+    ),
+    tabPanel("個人化推薦"),
+    tabPanel("關於")
 )
 
 # Define server logic required to draw a histogram
@@ -74,7 +78,9 @@ server <- function(input, output) {
     })
     
     output$mytable = DT::renderDataTable({
-        faithful
+        new_house[,c("鄉鎮市區", "交易年月日", "總價元", "建物型態", "建物現況格局.廳", "建物現況格局.衛", "建物現況格局.隔間")] %>%
+            filter(鄉鎮市區 == input$'RegionFinder')%>%
+            filter(交易年月日 > input$'transactiondate'[1] & 交易年月日 < input$'transactiondate'[2])
     })
 }
 
