@@ -1,4 +1,8 @@
 library(shiny)
+library(ggplot2)
+library(patchwork)
+library(reshape2)
+library(dplyr)
 
 rate_func <- function(x, r){
   return((1+r)^(x-1))
@@ -14,7 +18,7 @@ simulate_finance <- function(start_capital = 1000000, annual_cap_return = 5.0, a
                          annual_inflation = 2.5,
                          annual_netincome = 500000, annual_income_growth = 1, 
                          monthly_expense = 10000, expense_growth = 1,
-                         n_obs = 20, n_sim = 200,
+                         n_obs = 20,
                          monthly_rent = 10000, rent_annual_incre = 1, target_house_price = 8000000, left_house_price = 7000000,
                          handover_year = 3, loan_int_rate = 1.8){
   
@@ -63,10 +67,31 @@ simulate_finance <- function(start_capital = 1000000, annual_cap_return = 5.0, a
     capital_rent <- yearly_cap_rent[i]
     capital_buy  <- yearly_cap_buy[i]
   }
-  return(list(rent=yearly_cap_rent, buy=yearly_cap_buy, buy_exp=buy_expense_v, rent_exp=year_rent_v, net_income=year_income_v-year_expense_v))
+  return(list(rent=yearly_cap_rent, buy=yearly_cap_buy))
 }
 simulate_finance()
 
+#n_sim <- 50
+#sim1 <- data.frame(t(replicate(n_sim,simulate_finance())))
+#sim1$ind <- 1:n_sim
+
+#cap_rent <- melt(sim1$rent, value.name = 'Capital_Rent')
+#cap_rent$ind <- rep(1:20,n_sim)
+#cap_buy  <- melt(sim1$buy, value.name = 'Capital_Buy')
+#cap_buy$ind <- rep(1:20,n_sim)
+
+# p1 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent/1000000, group=L1, color=L1))+
+#   scale_color_gradient2(midpoint=median(1:n_sim),low="steelblue4", high="firebrick4", mid='bisque3', space ="Lab", guide = FALSE)+
+#   geom_line()+
+#   labs(x= 'Year',y= 'Capital (Millions)',title= '')
+# 
+# p2 <- ggplot(data= subset(cap_rent, ind==20), aes(x=Capital_Rent/1000000))+
+#   geom_density()+
+#   labs(x = 'Final Capital (M)',
+#        y = 'Density',
+#        title = '')
+# 
+# p1 / (p2+p2)
 
 #(((1+0.02)^12)*0.02)/(((1+0.02)^12)-1)*10000 #loan and interest average pay 12 perior (1y) 24 year rate
 #https://ebank.taipeifubon.com.tw/B2C/cfhqu/cfhqu018/CFHQU018_Home.faces
@@ -94,7 +119,7 @@ ui <-  fluidPage(
                    sliderInput("expense_growth", "Expenditure growth (in %)", min = 0, max = 20, value = 1, step = 0.5)
                    ),
             column(6,
-                   plotOutput("a_distPlot", height = "600px")),
+                   plotOutput("FinSimPlot", height = "600px")),
             column(3,
                    sliderInput("annual_inflation", "Annual inflation (in %)", min = 0, max = 10, value = 2.5, step = 0.1),
                    sliderInput("monthly_rent", "Rent (Monthly)", min = 4000, max = 30000, value = 10000, step = 1000, pre = "$", sep = ","),
@@ -110,7 +135,34 @@ ui <-  fluidPage(
 )
 
 server <- function(input, output) {
+  
+  output$FinSimPlot <- renderPlot({
+    n_sim = 30
+    sim1 <- data.frame(t(replicate(n_sim,simulate_finance(input$start_capital, input$annual_cap_return, input$annual_cap_dev,
+                                                         input$annual_inflation, input$annual_netincome, input$annual_income_growth, 
+                                                         input$monthly_expense, input$expense_growth, input$n_obs, input$monthly_rent, 
+                                                         input$rent_annual_incre, input$target_house_price, input$left_house_price,
+                                                         input$handover_year, input$loan_int_rate))))
+    sim1$ind <- 1:n_sim
+    cap_rent <- melt(sim1$rent, value.name = 'Capital_Rent')
+    cap_rent$ind <- rep((1:input$n_obs),n_sim)
+    cap_buy  <- melt(sim1$buy, value.name = 'Capital_Buy')
+    cap_buy$ind <- rep((1:input$n_obs),n_sim)
     
+    p1 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent/1000000, group=L1, color=L1))+
+      scale_color_gradient2(midpoint=median(1:n_sim),low="steelblue4", high="firebrick4", mid='bisque3', space ="Lab", guide = "none")+
+      geom_line()+
+      labs(x= 'Year',y= 'Capital (Millions)',title= '')
+    
+    p2 <- ggplot(data= subset(cap_rent, ind==(input$n_obs)), aes(x=Capital_Rent/1000000))+
+      geom_density()+
+      labs(x = 'Final Capital (M)',
+           y = 'Density',
+           title = '')
+    
+    p1 / (p2+p2)
+  })
+  
   
 }
 
