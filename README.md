@@ -7,5 +7,3 @@ The data is collected from Dept of Land Administration : Information of Actual P
 ## Motivation
 To get insight or quick idea of Tainan's real estate market for young house-seeker in Tainan, especially for those working in Tainan Science Park. 
 
-4.2-2, 4.2-7, 4.2-9
-4.3-1, 4.3-9, 4.3-11
