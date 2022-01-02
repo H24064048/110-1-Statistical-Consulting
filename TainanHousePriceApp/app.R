@@ -33,27 +33,36 @@ ui <- navbarPage(
                 #titlePanel("預售屋現況"),
                 
                 fluidRow(
-                    column(4,
-                        # Select which Gender(s) to plot
-                        checkboxGroupInput(inputId = "GenderFinder",
-                                            label = "Select Gender(s):",
-                                            choices = c("Male" = "M", "Female" = "F"),
-                                            selected = "M"),
-                        # Select which Division(s) to plot
+                    column(3,
+                        checkboxGroupInput(inputId = "RegionFinder",
+                                            label = "行政區",
+                                            choices = c("安平區", "新市區", "東區", "西區", "中西區", "南區", "安南區", "永康區"),
+                                            selected = "安平區") 
+                    ),
+                    column(4, #offset = 1,
+                        # checkboxGroupInput(inputId = "GenderFinder",
+                        #                     label = "Select Gender(s):",
+                        #                     choices = c("Male" = "M", "Female" = "F"),
+                        #                     selected = "M"),
                         checkboxGroupInput(inputId = "BuildingMaterial",
                                             label = "主要建材:",
                                             choices = c("鋼骨混凝土造", "鋼骨鋼筋混凝土造", "鋼筋混凝土造", "鋼筋混凝土構造"),
                                             selected = c("鋼骨混凝土造", "鋼骨鋼筋混凝土造", "鋼筋混凝土造", "鋼筋混凝土構造"))
                     ),
-                    column(4, offset = 2,
-                        # Select which Region(s) to plot
-                        checkboxGroupInput(inputId = "RegionFinder",
-                                           label = "行政區",
-                                           choices = c("安平區", "新市區", "東區", "西區", "中西區", "南區", "安南區", "永康區"),
-                                           selected = "安平區") 
+                    column(3,
+                        selectInput(inputId =  "BuyBedRoom",
+                                    label = "最少房數",
+                                    choices = c('1'=1,'2'=2,'3'=3, '4'=4, '5'=5)),
+                        selectInput(inputId =  "BuyLiveRoom",
+                                    label = "最少廳數",
+                                    choices = c('1'=1,'2'=2,'3'=3)),
+                        selectInput(inputId =  "BuyBathRoom",
+                                    label = "最少衛數",
+                                    choices = c('1'=1,'2'=2,'3'=3))
                     )
                 ),
-                sliderInput("transactionyear", "交易年分", min = 103, max = 110, value = c(106, 110))
+                sliderInput("transactionyear", "交易年分", min = 103, max = 110, value = c(106, 110)),
+                sliderInput("buyhousesize", "移轉總面積(坪)", min = 10, max = 100, value = c(20, 30), step=5)
             ),
                  
             mainPanel(
@@ -69,7 +78,7 @@ ui <- navbarPage(
     tabPanel("租屋",
         sidebarLayout(
             sidebarPanel(
-                sliderInput("binn", "Number of bins:", min = 1, max = 50, value = 30),
+                # sliderInput("binn", "Number of bins:", min = 1, max = 50, value = 30),
                 fluidRow(
                     column(4,
                         checkboxGroupInput(inputId = "RegionFinder2",
@@ -89,6 +98,24 @@ ui <- navbarPage(
                         selectInput(inputId =  "RentBathRoom",
                                     label = "最少衛數",
                                     choices = c('1'=1,'2'=2,'3'=3))
+                    ),
+                    column(4,
+                           selectInput(inputId =  "Organization",
+                                       label = "管理組織",
+                                       multiple = TRUE,
+                                       choices = c("有","無"),
+                                       selected = c("有","無")),
+                           selectInput(inputId =  "HouseApplication",
+                                       label = "附傢俱",
+                                       multiple = TRUE,
+                                       choices = c("有","無"),
+                                       selected = c("有","無")),
+                           selectInput(inputId =  "BuildingType",
+                                       label = "建物型態",
+                                       multiple = TRUE,
+                                       choices = c('公寓'='公寓(5樓含以下無電梯)', '住宅大樓'= '住宅大樓(11層含以上有電梯)', '套房'='套房(1房1廳1衛)', '華廈'='華廈(10層含以下有電梯)'),
+                                       selected = c('公寓(5樓含以下無電梯)','住宅大樓(11層含以上有電梯)','華廈(10層含以下有電梯)')
+                                       )
                     )
                 )
             ),
@@ -142,10 +169,15 @@ ui <- navbarPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
     
+    # Tab 1
     output$distPlot <- renderPlot({
         ggplot(data=new_house %>%
                    filter(主要建材 %in% input$'BuildingMaterial') %>%
                    filter(鄉鎮市區 %in% input$'RegionFinder') %>%
+                   filter(建物現況格局.房 >= input$'BuyBedRoom') %>%
+                   filter(建物現況格局.廳 >= input$'BuyLiveRoom') %>%
+                   filter(建物現況格局.衛 >= input$'BuyBathRoom') %>%
+                   filter((建物移轉總面積平方公尺 > (input$'buyhousesize'[1] *3.305785)) & (建物移轉總面積平方公尺 < ((input$'buyhousesize'[2])*3.305785))) %>%
                    filter((交易年月日 > (input$'transactionyear'[1] *10000)) & (交易年月日 < (((input$'transactionyear'[2]) + 1)*10000))),
                 aes(x = 總價元/1000000)) + 
             geom_histogram(bins = 30) +
@@ -159,19 +191,29 @@ server <- function(input, output) {
         new_house[,c("鄉鎮市區", "交易年月日", "總價元", "建物移轉總面積平方公尺", "建物型態", "建物現況格局.房", "建物現況格局.廳", "建物現況格局.衛", "主要建材")] %>%
             filter(主要建材 %in% input$'BuildingMaterial') %>%
             filter(鄉鎮市區 %in% input$'RegionFinder') %>%
+            filter(建物現況格局.房 >= input$'BuyBedRoom') %>%
+            filter(建物現況格局.廳 >= input$'BuyLiveRoom') %>%
+            filter(建物現況格局.衛 >= input$'BuyBathRoom') %>%
+            filter((建物移轉總面積平方公尺 > (input$'buyhousesize'[1] *3.305785)) & (建物移轉總面積平方公尺 < ((input$'buyhousesize'[2])*3.305785))) %>%
             filter((交易年月日 > (input$'transactionyear'[1] *10000)) & (交易年月日 < (((input$'transactionyear'[2]) + 1)*10000))),
         colnames = c("鄉鎮市區", "交易年月日", "總價元", "平方公尺", "建物型態", "房", "廳", "衛", "主要建材"), 
         escape = FALSE
     )})
     
+    # Tab 2
     output$Rent_density <- renderPlot({ 
         rentdist_fig(rent_house %>%
                         filter(鄉鎮市區 %in% input$'RegionFinder2') %>%
                         filter(建物現況格局.房 >= input$'RentBedRoom') %>%
                         filter(建物現況格局.廳 >= input$'RentLiveRoom') %>%
-                        filter(建物現況格局.衛 >= input$'RentBathRoom'))
+                        filter(建物現況格局.衛 >= input$'RentBathRoom') %>%
+                        filter(有無管理組織 %in% input$'Organization') %>%
+                        filter(有無附傢俱 %in% input$'HouseApplication') %>%
+                        filter(建物型態 %in% input$'BuildingType'))
+                        
     })
     
+    # Tab 3
     output$FinSimPlot <- renderPlot({
         n_sim = 30
         sim1 <- data.frame(t(replicate(n_sim,simulate_finance(input$start_capital, input$annual_cap_return, input$annual_cap_dev,
@@ -185,34 +227,44 @@ server <- function(input, output) {
         cap_buy  <- melt(sim1$buy, value.name = 'Capital_Buy')
         cap_buy$ind <- rep((1:input$n_obs),n_sim)
         
-        p1 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent/1000000, group=L1, color=L1))+
+        p1 <- ggplot(data= cap_buy, aes(x=ind, y=Capital_Buy/1000000, group=L1, color=L1))+
+            scale_color_gradient2(midpoint=median(1:n_sim),low="steelblue4", high="firebrick4", mid='bisque3', space ="Lab", guide = "none")+
+            geom_line()+
+            labs(x= 'Year',y= 'Capital (Millions)',title= 'Accumulated assets (Buying)')+
+            theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
+        
+        p2 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent/1000000, group=L1, color=L1))+
             scale_color_gradient2(midpoint=median(1:n_sim),low="steelblue4", high="firebrick4", mid='bisque3', space ="Lab", guide = "none")+
             geom_line()+
             labs(x= 'Year',y= 'Capital (Millions)',title= 'Accumulated assets (Renting)')+
             theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
         
-        p2 <- ggplot(data= subset(cap_rent, ind==(input$n_obs)), aes(x=Capital_Rent/1000000))+
+        p3 <- ggplot(data= subset(cap_rent, ind==(input$n_obs)), aes(x=Capital_Rent/1000000))+
             geom_density()+
             labs(x = 'Final Capital (M)',
                  y = 'Density',
                  title = 'Final Asset (Renting)')+
             theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
         
-        p3 <- ggplot(data= subset(cap_buy, ind==(input$n_obs)), aes(x=Capital_Buy/1000000))+
+        p4 <- ggplot(data= subset(cap_buy, ind==(input$n_obs)), aes(x=Capital_Buy/1000000))+
             geom_density()+
             labs(x = 'Final Capital (M)',
                  y = 'Density',
                  title = 'Final Asset (Buying)')+
             theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
         
-        p4 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent))+
+        p5 <- ggplot(data= cap_buy %>%
+                         group_by(ind) %>% 
+                         summarise(mean(Capital_Buy >0))
+                     ,aes(x=ind, y=`mean(Capital_Buy > 0)`))+
             geom_line()+
+            scale_y_continuous(limits = c(0, 1))+
             labs(x = 'Year',
                  y = 'Percentage',
-                 title = 'Chance of Alive')+
+                 title = 'Chance of not Broke')+
             theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
-        
-        p1 / (p2+p3+p4)
+
+        p1 / p2 / (p3+p4+p5)
     })
 }
 
