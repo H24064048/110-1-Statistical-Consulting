@@ -7,7 +7,12 @@ library(ggplot2)
 library(ggridges)
 library(scales)
 
+library(patchwork)
+library(reshape2)
+
+
 source("source_plot.R", encoding="utf-8")
+source("source_finance.R")
 
 #setwd(choose.dir())
 new_house <- read.csv('B2016Q1_2021Q3.csv')
@@ -96,6 +101,41 @@ ui <- navbarPage(
     ),
     
     # Tab 3
+    tabPanel("個人財務",
+        fluidPage(
+            fluidRow(
+                column(2, tags$h3("Financial Status")),
+                column(8, tags$h3("Housing Plan Simulation")),
+                column(2, tags$h3("Buy or Rent"))
+            ),
+            fluidRow(
+                column(2,
+                    sliderInput("n_obs", "Years to come (To clear debt)", min = 0, max = 40, value = 20),
+                    sliderInput("start_capital", "Initial capital", min = 400000, max = 5000000, value = 1000000, step = 100000, pre = "$", sep = ","),
+                    sliderInput("annual_cap_return", "Median investment return (in %)", min = 0.0, max = 30.0, value = 5.0, step = 0.5),
+                    sliderInput("annual_cap_dev", "Investment fluctuation rate(in %)", min = 0, max = 30.0, value = 3, step = 1),
+                    sliderInput("annual_netincome", "Annual net income", min = 300000, max = 2000000, value = 500000, step = 50000, pre = "$", sep = ","),
+                    sliderInput("annual_income_growth", "Annual Income growth (in %)", min = 0, max = 20, value = 1, step = 0.5),
+                    sliderInput("monthly_expense", "Monthly expenditure", min = 1000, max = 100000, value = 10000, step = 1000, pre = "$", sep = ","),
+                    sliderInput("expense_growth", "Expenditure growth (in %)", min = 0, max = 20, value = 1, step = 0.5)
+                ),
+                column(8,
+                    plotOutput("FinSimPlot", height = "600px")),
+                column(2,
+                    sliderInput("annual_inflation", "Annual inflation (in %)", min = 0, max = 10, value = 2.5, step = 0.1),
+                    sliderInput("monthly_rent", "Rent (Monthly)", min = 4000, max = 30000, value = 10000, step = 1000, pre = "$", sep = ","),
+                    sliderInput("rent_annual_incre", "Rent Increase (Monthly)  (%)", min = 0, max = 15, value= 0, step=0.1),
+                    sliderInput("target_house_price", "Buy house price", min = 3000000, max = 15000000, value = 8000000, step = 500000, pre = "$", sep = ","),
+                    sliderInput("left_house_price", "Remaining house payment (Loan)", min = 3000000, max = 15000000, value = 8000000, step = 500000, pre = "$", sep = ","),
+                    sliderInput("handover_year", "Handover year", min = 1, max = 10, value = 3, step = 1),
+                    sliderInput("loan_int_rate", "Loan interest (%)", min = 0, max = 16, value = 1.8, step=0.1)#,
+                    #actionButton("Sim_butt", "Start simulation", icon("random"))
+                )
+            )
+        )                 
+    ),
+    
+    # Tab 4
     tabPanel("關於")
 )
 
@@ -103,12 +143,15 @@ ui <- navbarPage(
 server <- function(input, output) {
     
     output$distPlot <- renderPlot({
-        hist(new_house %>%
-                 filter(主要建材 %in% input$'BuildingMaterial') %>%
-                 filter(鄉鎮市區 %in% input$'RegionFinder') %>%
-                 filter((交易年月日 > (input$'transactionyear'[1] *10000)) & (交易年月日 < (((input$'transactionyear'[2]) + 1)*10000))) %>%
-                 select(總價元)/1000000,
-            col = 'darkgray', border = 'white', xlab='總價(百萬元)')
+        ggplot(data=new_house %>%
+                   filter(主要建材 %in% input$'BuildingMaterial') %>%
+                   filter(鄉鎮市區 %in% input$'RegionFinder') %>%
+                   filter((交易年月日 > (input$'transactionyear'[1] *10000)) & (交易年月日 < (((input$'transactionyear'[2]) + 1)*10000))),
+                aes(x = 總價元/1000000)) + 
+            geom_histogram(bins = 30) +
+            labs(x = '總價(百萬元)',
+                 y = '成交數',
+                 title = '房價分布圖')
     })
     
 
@@ -122,11 +165,54 @@ server <- function(input, output) {
     )})
     
     output$Rent_density <- renderPlot({ 
-        rentdist_fig(rent_house2 %>%
+        rentdist_fig(rent_house %>%
                         filter(鄉鎮市區 %in% input$'RegionFinder2') %>%
                         filter(建物現況格局.房 >= input$'RentBedRoom') %>%
                         filter(建物現況格局.廳 >= input$'RentLiveRoom') %>%
                         filter(建物現況格局.衛 >= input$'RentBathRoom'))
+    })
+    
+    output$FinSimPlot <- renderPlot({
+        n_sim = 30
+        sim1 <- data.frame(t(replicate(n_sim,simulate_finance(input$start_capital, input$annual_cap_return, input$annual_cap_dev,
+                                                              input$annual_inflation, input$annual_netincome, input$annual_income_growth, 
+                                                              input$monthly_expense, input$expense_growth, input$n_obs, input$monthly_rent, 
+                                                              input$rent_annual_incre, input$target_house_price, input$left_house_price,
+                                                              input$handover_year, input$loan_int_rate))))
+        sim1$ind <- 1:n_sim
+        cap_rent <- melt(sim1$rent, value.name = 'Capital_Rent')
+        cap_rent$ind <- rep((1:input$n_obs),n_sim)
+        cap_buy  <- melt(sim1$buy, value.name = 'Capital_Buy')
+        cap_buy$ind <- rep((1:input$n_obs),n_sim)
+        
+        p1 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent/1000000, group=L1, color=L1))+
+            scale_color_gradient2(midpoint=median(1:n_sim),low="steelblue4", high="firebrick4", mid='bisque3', space ="Lab", guide = "none")+
+            geom_line()+
+            labs(x= 'Year',y= 'Capital (Millions)',title= 'Accumulated assets (Renting)')+
+            theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
+        
+        p2 <- ggplot(data= subset(cap_rent, ind==(input$n_obs)), aes(x=Capital_Rent/1000000))+
+            geom_density()+
+            labs(x = 'Final Capital (M)',
+                 y = 'Density',
+                 title = 'Final Asset (Renting)')+
+            theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
+        
+        p3 <- ggplot(data= subset(cap_buy, ind==(input$n_obs)), aes(x=Capital_Buy/1000000))+
+            geom_density()+
+            labs(x = 'Final Capital (M)',
+                 y = 'Density',
+                 title = 'Final Asset (Buying)')+
+            theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
+        
+        p4 <- ggplot(data= cap_rent, aes(x=ind, y=Capital_Rent))+
+            geom_line()+
+            labs(x = 'Year',
+                 y = 'Percentage',
+                 title = 'Chance of Alive')+
+            theme(plot.title = element_text(hjust = 0.5, color = "navyblue", size = 15, face = "bold"))
+        
+        p1 / (p2+p3+p4)
     })
 }
 
